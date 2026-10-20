@@ -39,7 +39,7 @@ export function createStudentController(students: StudentRepository) {
   const getOne = asyncHandler(async (req: Request, res: Response) => {
     const id = parseId(req.params.id);
     const student = students.findById(id);
-    if (!student) throw notFound("Estudiante no encontrado");
+    if (!student) throw notFound("El estudiante no encontrado");
     res.json({ data: toPublicStudent(student) });
   });
 
@@ -51,14 +51,14 @@ export function createStudentController(students: StudentRepository) {
 
   const update = asyncHandler(async (req: Request, res: Response) => {
     const id = parseId(req.params.id);
-    if (!students.findById(id)) throw notFound("Estudiante no encontrado");
+    if (!students.findById(id)) throw notFound("El estudiante no encontrado");
     const input = await toInput(req.body);
     res.json({ data: toPublicStudent(students.update(id, input)) });
   });
 
   const remove = asyncHandler(async (req: Request, res: Response) => {
     const id = parseId(req.params.id);
-    if (!students.delete(id)) throw notFound("Estudiante no encontrado");
+    if (!students.delete(id)) throw notFound("El estudiante no encontrado");
     res.status(204).send();
   });
 
