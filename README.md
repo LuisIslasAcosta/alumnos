@@ -104,3 +104,4 @@ src/
 tests/                 # pruebas de integración (vitest + supertest)
 ```
 # alumnos
+\nRama dev_clase creada para práctica de Git.
