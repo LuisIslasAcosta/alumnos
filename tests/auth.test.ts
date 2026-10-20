@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import request from "supertest";
+import jwt from "jsonwebtoken";
 import type { Express } from "express";
 import { buildTestApp } from "./helpers";
+import { config } from "../src/config/env";
 
 describe("Autenticación", () => {
   let app: Express;
@@ -46,6 +48,28 @@ describe("Autenticación", () => {
       .send({ email: "log@test.com", password: "secret123" });
     expect(res.status).toBe(200);
     expect(res.body.token).toBeTypeOf("string");
+  });
+
+  it("incluye nombre y correo en el payload del token", async () => {
+    await request(app).post("/api/students").send({
+      nombre: "Ana",
+      apellido: "López",
+      matricula: "A100",
+      email: "student@test.com",
+      password: "secret123",
+    });
+
+    const login = await request(app)
+      .post("/api/auth/login")
+      .send({ email: "student@test.com", password: "secret123" });
+
+    const payload = jwt.verify(login.body.token, config.jwtSecret) as {
+      nombre?: string;
+      email?: string;
+    };
+
+    expect(payload.nombre).toBe("Ana López");
+    expect(payload.email).toBe("student@test.com");
   });
 
   it("rechaza credenciales incorrectas (401)", async () => {

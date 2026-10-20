@@ -23,5 +23,11 @@ export function createAuthController(authService: AuthService) {
     res.status(200).json({ message: "Sesión cerrada" });
   });
 
-  return { register, login, logout };
+  const me = asyncHandler(async (req: Request, res: Response) => {
+    // req.auth tiene los datos descodificados del JWT pasados por requireAuth
+    const userProfile = await authService.getMe(req.auth!);
+    res.status(200).json(userProfile);
+  });
+
+  return { register, login, logout, me };
 }
