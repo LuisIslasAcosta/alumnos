@@ -1,4 +1,5 @@
 import express, { type Express } from "express";
+import cors from "cors";
 import swaggerUi from "swagger-ui-express";
 import { openapiSpec } from "./docs/openapi";
 import type { AppDatabase } from "./db/database";
@@ -21,13 +22,13 @@ export function createApp(db: AppDatabase): Express {
   const authService = new AuthService(users, tokens, students);
 
   const app = express();
+  app.use(cors()); 
   app.use(express.json());
 
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
   });
 
-  // Documentación Swagger / OpenAPI
   app.get("/api-docs.json", (_req, res) => {
     res.json(openapiSpec);
   });

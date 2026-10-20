@@ -16,9 +16,20 @@ export interface PublicUser {
 export interface TokenPayload {
   sub: string;
   email: string;
+  nombre?: string;
+  kind?: string;
   jti: string;
   exp: number;
   iat: number;
+}
+
+export interface UserProfile {
+  id: number;
+  nombre?: string;
+  apellido?: string;
+  matricula?: string;
+  email: string;
+  kind: "student" | "user";
 }
 
 export class AuthService {
@@ -41,18 +52,23 @@ export class AuthService {
     email: string,
     password: string,
   ): Promise<{ token: string; user: PublicUser }> {
-    // Se puede iniciar sesión con una cuenta de usuario (registro) o con
-    // las credenciales de un estudiante (email + password).
     const user = this.users.findByEmail(email);
     const student = user ? undefined : this.students.findByEmail(email);
     const account = user
-      ? { id: user.id, email: user.email, hash: user.password_hash, kind: "user" }
+      ? {
+          id: user.id,
+          email: user.email,
+          nombre: user.email.split("@")[0],
+          hash: user.password_hash,
+          kind: "user" as const,
+        }
       : student
         ? {
             id: student.id,
             email: student.email,
+            nombre: `${student.nombre} ${student.apellido}`.trim(),
             hash: student.password_hash,
-            kind: "student",
+            kind: "student" as const,
           }
         : undefined;
 
@@ -68,14 +84,43 @@ export class AuthService {
       jwtid: randomUUID(),
     };
     const token = jwt.sign(
-      { sub: String(account.id), email: account.email, kind: account.kind },
+      {
+        sub: String(account.id),
+        email: account.email,
+        nombre: account.nombre,
+        kind: account.kind,
+      },
       config.jwtSecret,
       options,
     );
     return { token, user: { id: account.id, email: account.email } };
   }
 
-  /** Revoca el token actual (logout) usando su jti y expiración. */
+  async getMe(payload: TokenPayload): Promise<UserProfile> {
+    if (payload.kind === "student") {
+      const student = this.students.findById(Number(payload.sub));
+      if (!student) throw unauthorized("Estudiante no encontrado");
+
+      return {
+        id: student.id,
+        nombre: student.nombre,
+        apellido: student.apellido,
+        matricula: student.matricula,
+        email: student.email,
+        kind: "student",
+      };
+    }
+
+    const user = this.users.findById(Number(payload.sub));
+    if (!user) throw unauthorized("Usuario no encontrado");
+
+    return {
+      id: user.id,
+      email: user.email,
+      kind: "user",
+    };
+  }
+
   logout(payload: TokenPayload): void {
     this.tokens.revoke(payload.jti, payload.exp);
   }
