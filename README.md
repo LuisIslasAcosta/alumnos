@@ -103,3 +103,4 @@ src/
   schemas/             # validación con Zod
 tests/                 # pruebas de integración (vitest + supertest)
 ```
+# alumnos
