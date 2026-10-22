@@ -10,6 +10,7 @@ export function createAuthRouter(authService: AuthService): Router {
 
   router.post("/register", controller.register);
   router.post("/login", controller.login);
+  router.post("/refresh", controller.refresh);
   router.post("/logout", auth, controller.logout);
 
   // Nuevo endpoint protegido para obtener mi perfil

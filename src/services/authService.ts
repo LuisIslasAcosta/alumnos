@@ -7,6 +7,7 @@ import { conflict, unauthorized } from "../errors/httpError";
 import type { UserRepository } from "../repositories/userRepository";
 import type { TokenRepository } from "../repositories/tokenRepository";
 import type { StudentRepository } from "../repositories/studentRepository";
+import type { RefreshTokenRepository } from "../repositories/refreshTokenRepository";
 
 export interface PublicUser {
   id: number;
@@ -32,11 +33,20 @@ export interface UserProfile {
   kind: "student" | "user";
 }
 
+export interface AuthTokens {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+}
+
 export class AuthService {
+  private readonly refreshTokenExpiry = 7 * 24 * 60 * 60;
+
   constructor(
     private readonly users: UserRepository,
     private readonly tokens: TokenRepository,
     private readonly students: StudentRepository,
+    private readonly refreshTokens: RefreshTokenRepository,
   ) {}
 
   async register(email: string, password: string): Promise<PublicUser> {
@@ -51,7 +61,7 @@ export class AuthService {
   async login(
     email: string,
     password: string,
-  ): Promise<{ token: string; user: PublicUser }> {
+  ): Promise<{ accessToken: string; refreshToken: string; user: PublicUser }> {
     const user = this.users.findByEmail(email);
     const student = user ? undefined : this.students.findByEmail(email);
     const account = user
@@ -79,21 +89,74 @@ export class AuthService {
     const ok = await bcrypt.compare(password, account.hash);
     if (!ok) throw unauthorized("Credenciales inválidas");
 
+    const accessToken = this.generateAccessToken(account.id, account.email, account.kind);
+    const refreshTokenRecord = this.refreshTokens.create(
+      account.id,
+      account.kind,
+      this.refreshTokenExpiry,
+    );
+
+    return {
+      accessToken,
+      refreshToken: refreshTokenRecord.token,
+      user: { id: account.id, email: account.email },
+    };
+  }
+
+  async refresh(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
+    const validation = this.refreshTokens.isValid(refreshToken);
+
+    if (!validation.valid || !validation.userId || !validation.userKind) {
+      throw unauthorized("Refresh token inválido o expirado");
+    }
+
+    this.refreshTokens.delete(refreshToken);
+
+    const user = validation.userKind === "user"
+      ? this.users.findById(validation.userId)
+      : null;
+    const student = validation.userKind === "student"
+      ? this.students.findById(validation.userId)
+      : null;
+
+    const account = user || student;
+    if (!account) {
+      throw unauthorized("Usuario no encontrado");
+    }
+
+    const accessToken = this.generateAccessToken(
+      account.id,
+      account.email,
+      validation.userKind,
+    );
+
+    const refreshTokenRecord = this.refreshTokens.create(
+      account.id,
+      validation.userKind,
+      this.refreshTokenExpiry,
+    );
+
+    return {
+      accessToken,
+      refreshToken: refreshTokenRecord.token,
+    };
+  }
+
+  private generateAccessToken(
+    userId: number,
+    email: string,
+    kind: "user" | "student",
+  ): string {
     const options: SignOptions = {
       expiresIn: config.jwtExpiresIn as SignOptions["expiresIn"],
       jwtid: randomUUID(),
     };
-    const token = jwt.sign(
-      {
-        sub: String(account.id),
-        email: account.email,
-        nombre: account.nombre,
-        kind: account.kind,
-      },
+
+    return jwt.sign(
+      { sub: String(userId), email, kind },
       config.jwtSecret,
       options,
     );
-    return { token, user: { id: account.id, email: account.email } };
   }
 
   async getMe(payload: TokenPayload): Promise<UserProfile> {
@@ -121,8 +184,11 @@ export class AuthService {
     };
   }
 
-  logout(payload: TokenPayload): void {
+  logout(payload: TokenPayload, refreshToken?: string): void {
     this.tokens.revoke(payload.jti, payload.exp);
+    if (refreshToken) {
+      this.refreshTokens.delete(refreshToken);
+    }
   }
 
   verify(token: string): TokenPayload {
